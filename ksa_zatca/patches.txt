@@ -1,4 +1,4 @@
 [pre_model_sync]
 ksa_zatca.patches.change_invoice_status
-ksa_zatca.patches.send_invoice_to_zatcaaaa
+ksa_zatca.patches.send_invoice_to_zatcaaaaa
 [post_model_sync]
