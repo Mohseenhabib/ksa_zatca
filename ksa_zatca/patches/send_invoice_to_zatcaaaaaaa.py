@@ -16,6 +16,7 @@ def execute():
                 zatca_Call,
                 timeout=600,
                 invoice_number=i,
-                queue="short"
+                queue="long"
                 
             )
+        frappe.db.commit()
