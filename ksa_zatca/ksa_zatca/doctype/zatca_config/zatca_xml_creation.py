@@ -167,7 +167,7 @@ def fill_allowance_charge(root,data):
         
         allowance_charge_reason = etree.SubElement(allowance_charge, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}AllowanceChargeReason")
         allowance_charge_reason.text = "discount"
-        
+       
         amount = etree.SubElement(allowance_charge, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Amount")
         amount.set("currencyID", "SAR")
         amount.text = str(round(abs(tax['discount']),2))
@@ -208,7 +208,7 @@ def fill_allowance_charge(root,data):
 
 def fill_taxes_data(root, data):
     tax_totals = root.findall('.//cac:TaxTotal', ns_map)
-
+   
     # Update base total tax amount
     base_total_tax_amount = tax_totals[0].find('.//cbc:TaxAmount', ns_map)
     base_total_tax_amount.text = data.get('base_total_tax_amount', '0')
@@ -231,7 +231,8 @@ def fill_taxes_data(root, data):
         # if tax_subtotal_data.get('tax_category_id') == "S":
         #     taxable_amount.text = str(tax_subtotal_data.get('taxable_amount', '0') - data.get('discount_amount'))
         # else:
-        taxable_amount.text = str(tax_subtotal_data.get('taxable_amount', '0'))
+        
+        taxable_amount.text = str(round(tax_subtotal_data.get('taxable_amount', '0'), 2))
         taxable_amount.set('currencyID', data.get('invoice_currency', 'SAR'))
 
         # Create and set tax amount

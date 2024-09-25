@@ -21,7 +21,7 @@ def zatca_Call(invoice_number='ACC-SINV-2024-00017'):
         frappe.throw("Invoice Number is NOT Valid:  " + str(invoice_number))
     
     dummy_data = generate_data_dict(invoice_number)
-    
+    # frappe.throw(str(dummy_data))
     if dummy_data['request_status'] == 3:
         frappe.throw("Please Do The Compliance First.")
     
@@ -31,8 +31,10 @@ def zatca_Call(invoice_number='ACC-SINV-2024-00017'):
     # Fill in data
     root = fill_basic_data(root,dummy_data)
     root = fill_supplier_customer_data(root,dummy_data)
+     
     if float(dummy_data.get('allowance_total_amount')) > 0 :
         root = fill_allowance_charge(root,dummy_data)
+    
     root = fill_taxes_data(root,dummy_data)
     root = fill_totals_data(root,dummy_data)
     root = fill_items_data(root,dummy_data)
@@ -140,11 +142,11 @@ def generate_data_dict(doc_name):
         d['tax_scheme_id'] = 'VAT'
         d['price_amount'] = str(item.get('rate'))
         d['allowance_charge_reason'] = 'discount'
-        d['allowance_charge_amount'] = str(item.get('discount_amount'))
+        d['allowance_charge_amount'] = str(0)
         data['items'].append(d)
     # Taxes
     data['tax_subtotal'] = get_taxes(sales_invoice)
-    data['base_total_tax_amount'] = str(abs(sales_invoice.get('base_total_taxes_and_charges')))
+    data['base_total_tax_amount'] = str(abs(sales_invoice.get('total_taxes_and_charges')))
     data['total_tax_amount'] = str(abs(sales_invoice.get('total_taxes_and_charges')))
     # Totals
     data['line_extension_amount'] = str(abs(sales_invoice.get('total')))
@@ -246,11 +248,12 @@ def get_taxes(invoice):
     taxes_list = []
     
     for item in invoice.get('items'):
+        
         tax_template = item.get('item_tax_template', '')
         tax_rate = float(item.get('tax_rate', 0))
         taxable_amount = float(item.get('net_amount', 0))
         discount = float(item.get('amount') - item.get('net_amount'))
-        tax_amount = float(item.get('tax_amount', 0))
+        tax_amount = float(item.get('tax_amount'))
         tax_category_id = item.get('custom_item_tax_category', '')
         tax_exemption_reason_code = item.get('custom_tax_exemption_reason','')
         if tax_category_id == 'O':
@@ -267,19 +270,23 @@ def get_taxes(invoice):
                 tax_dict['discount'] += discount
                 tax_found = True
                 break
-
+           
         if not tax_found:
             tax_dict = {
                 'tax_template': tax_template,
-                'taxable_amount': abs(taxable_amount),
+                'taxable_amount': round(taxable_amount, 2),
                 'tax_rate': tax_rate,
                 'tax_category_id': tax_category_id,
-                'tax_amount': abs(tax_amount),
+                'tax_amount': tax_amount,
                 'tax_exemption_reason_code':tax_exemption_reason_code,
                 'tax_exemption_reason_text':tax_exemption_reason_text,
                 'discount':discount
                 }
             taxes_list.append(tax_dict)
+   
+    taxes_list[0]['tax_amount']=abs(invoice.get('total_taxes_and_charges'))
+    taxes_list[0]["taxable_amount"]=abs(round(taxes_list[0]["taxable_amount"], 2))
+    
     return taxes_list
 
 def generate_xml_name(dummy_data):
@@ -328,6 +335,7 @@ def _delete_xml_file(xml_name):
 
 def zatca_request(data):
     auth = base64.b64encode(f"{data.get('token')}:{data.get('secret')}".encode()).decode()
+    
     if data['request_status'] == 2:
         url = f"{data.get('url')}/compliance/invoices"
     elif data['request_status'] == 1:
