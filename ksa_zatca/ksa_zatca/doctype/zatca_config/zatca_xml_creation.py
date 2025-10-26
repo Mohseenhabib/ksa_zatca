@@ -1,24 +1,24 @@
-import frappe
-from frappe import _
-from lxml import etree
+import base64
+import hashlib
+import io
+import os
+import re
+import uuid
 import xml
 import xml.dom.minidom as minidom
-import qrcode
-import base64
-import uuid
-import hashlib
-import re
-import ecdsa
 from base64 import b64encode
-from pyqrcode import create as qr_create
-import os
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography import x509
 from datetime import datetime
-import io
 
+import ecdsa
+import frappe
+import qrcode
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from frappe import _
+from lxml import etree
+from pyqrcode import create as qr_create
 
 ns_map = {
     # '': 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2',
@@ -380,7 +380,7 @@ def fill_items_data(root,data):
 
         # Create and set the ChargeIndicator element inside AllowanceCharge
         charge_indicator = etree.SubElement(allowance_charge, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}ChargeIndicator')
-        charge_indicator.text = 'true'
+        charge_indicator.text = 'false'
 
         # Create and set the AllowanceChargeReason element inside AllowanceCharge
         allowance_charge_reason = etree.SubElement(allowance_charge, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}AllowanceChargeReason')
