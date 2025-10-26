@@ -18,11 +18,7 @@ frappe.ui.form.on("Sales Invoice", {
     });
   },
   refresh: function (frm) {
-    if (
-      frm.doc.docstatus === 1 &&
-      frm.doc.custom_cleared == 0 &&
-      frm.doc.custom_production == 1
-    ) {
+    if (frm.doc.docstatus === 1 && frm.doc.custom_cleared == 0) {
       frm.add_custom_button(
         __("Zatca"),
         function () {
