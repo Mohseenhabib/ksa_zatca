@@ -164,7 +164,7 @@ def generate_data_dict(doc_name):
     else:
         data['customer_id'] = customer.get('tax_id')
     if customer.get('custom_commercial_register') in [None,''] and data['invoice_type'] == '0100000':
-        frappe.throw("Please Enter Customer Commercial Register")
+        pass
     else:
         data['customer_cr'] = customer.get('custom_commercial_register')
     if customer_address not in [None,'']:
