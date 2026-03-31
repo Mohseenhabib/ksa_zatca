@@ -1,22 +1,22 @@
 frappe.ui.form.on("Sales Invoice", {
-  on_submit: function (frm) {
-    frm.call({
-      method:
-        "ksa_zatca.ksa_zatca.doctype.zatca_config.zatca_invoice.zatca_Call",
-      args: {
-        invoice_number: frm.doc.name,
-      },
-      freeze: true,
-      freeze_message: __("Sending Zatca Request..."),
-      callback: function (response) {
-        if (response.message) {
-          frappe.msgprint(response.message);
-          frm.reload_doc();
-        }
-        frm.reload_doc();
-      },
-    });
-  },
+  // on_submit: function (frm) {
+  //   frm.call({
+  //     method:
+  //       "ksa_zatca.ksa_zatca.doctype.zatca_config.zatca_invoice.zatca_Call",
+  //     args: {
+  //       invoice_number: frm.doc.name,
+  //     },
+  //     freeze: true,
+  //     freeze_message: __("Sending Zatca Request..."),
+  //     callback: function (response) {
+  //       if (response.message) {
+  //         frappe.msgprint(response.message);
+  //         frm.reload_doc();
+  //       }
+  //       frm.reload_doc();
+  //     },
+  //   });
+  // },
   refresh: function (frm) {
     if (frm.doc.docstatus === 1 && frm.doc.custom_cleared == 0) {
       frm.add_custom_button(
@@ -40,7 +40,7 @@ frappe.ui.form.on("Sales Invoice", {
           });
           frm.reload_doc();
         },
-        __("Phase-2")
+        __("Phase-2"),
       );
     }
   },
