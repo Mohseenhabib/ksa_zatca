@@ -74,32 +74,55 @@ def zatca_Call(invoice_number='ACC-SINV-2024-00017'):
 
 
 def on_submit(doc, method=None):
-    """Auto-run the ZATCA clearance/reporting call when a Sales Invoice is
+    """Kick off the ZATCA clearance/reporting call when a Sales Invoice is
     submitted, so the correctly signed QR is attached without waiting for
     the manual "Phase-2" button.
 
-    Never blocks submission: if the company isn't onboarded with ZATCA yet,
-    or the ZATCA call fails for any reason (e.g. network issue), the invoice
-    still submits normally and the "Phase-2" button remains available to
-    retry manually.
+    This is enqueued as a background job rather than called directly: ZATCA
+    is a live external API on the production endpoint, and calling it
+    synchronously here would make every single invoice submission block the
+    browser on that network round-trip. If ZATCA is slow, that makes submit
+    look hung, and the QR/custom_cleared fields only ever look right if the
+    user waits it out or reloads at just the right moment. Running it in the
+    background instead makes submission itself instant regardless of ZATCA's
+    latency; run_zatca_call_background() pushes a realtime event when it's
+    actually done, and the client (see public/js/sales_invoice.js) reloads
+    the form automatically on that event - no manual refresh, ever.
     """
     if not frappe.db.exists("Zatca Config", doc.company):
         return
 
+    frappe.enqueue(
+        "ksa_zatca.ksa_zatca.doctype.zatca_config.zatca_invoice.run_zatca_call_background",
+        queue="short",
+        invoice_name=doc.name,
+        # Defer handoff to the worker until this request's transaction (the
+        # one setting docstatus=1) actually commits - otherwise the worker
+        # could pick the job up and try to load this invoice before its
+        # submit is even visible in the DB yet.
+        enqueue_after_commit=True,
+    )
+
+
+def run_zatca_call_background(invoice_name):
+    """Background-job wrapper around zatca_Call(): never lets a ZATCA
+    failure go unnoticed (logs it), and always notifies the browser that
+    submitted this invoice when it's done, success or failure, so it can
+    refresh and show the final state.
+    """
     try:
-        zatca_Call(doc.name)
+        zatca_Call(invoice_name)
     except Exception:
         frappe.log_error(
-            title=f"ZATCA auto-submit failed for {doc.name}",
+            title=f"ZATCA auto-submit failed for {invoice_name}",
             message=frappe.get_traceback(),
         )
     finally:
-        # zatca_Call writes ksa_einv_qr/qr_code/custom_cleared etc. straight
-        # to the DB via separate doc instances, so this `doc` (whose state
-        # gets serialized back to the browser after submit) never sees them
-        # unless we reload it here - otherwise the UI looks stale until a
-        # full page refresh.
-        doc.reload()
+        frappe.publish_realtime(
+            "ksa_zatca_processed",
+            {"invoice": invoice_name},
+            user=frappe.session.user,
+        )
 
 
 def generate_data_dict(doc_name):

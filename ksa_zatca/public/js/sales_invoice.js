@@ -1,17 +1,23 @@
+// The ZATCA clearance/reporting call is enqueued as a background job right
+// after submit (see on_submit in zatca_invoice.py), not run inline with the
+// submit request - ZATCA is a live external API and can be slow, so we
+// don't want every invoice submission blocked on it. Once that background
+// job finishes (success or failure), it publishes this realtime event; when
+// it's for the invoice currently open, refresh so the QR/custom_cleared
+// fields show up automatically, with no manual reload needed.
+frappe.realtime.on("ksa_zatca_processed", function (data) {
+  const frm = cur_frm;
+  if (frm && frm.doc.doctype === "Sales Invoice" && frm.doc.name === data.invoice) {
+    frm.reload_doc();
+  }
+});
+
 frappe.ui.form.on("Sales Invoice", {
-  // The actual ZATCA clearance call runs server-side, in the on_submit
-  // doc_event (see zatca_invoice.py) - it always runs there regardless of
-  // how the submit happened (desk UI, API, mobile). That call is idempotent
-  // (guarded on custom_cleared), so it's safe to also poke it from here.
-  //
-  // What this handler is actually for: the submit response the desk UI
-  // receives isn't always guaranteed to already carry the QR/custom_cleared
-  // fields written by that server-side hook (e.g. if the doctype is ever
-  // queued in background, or under any other timing quirk) - so instead of
-  // trusting that payload, force one clean re-fetch straight from the
-  // server once the submit is confirmed done. This is what actually fixes
-  // "the fields look stale until I refresh the whole page".
   on_submit: function (frm) {
+    // Submit itself completes before ZATCA processing does now (it's
+    // backgrounded) - this just syncs the normal post-submit state. The
+    // ksa_zatca_processed listener above handles the ZATCA-specific fields
+    // once that background job actually finishes.
     frm.reload_doc();
   },
   refresh: function (frm) {
