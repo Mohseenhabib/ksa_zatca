@@ -195,8 +195,16 @@ def generate_data_dict(doc_name):
     data['tax_exclusive_amount'] = str(abs(sales_invoice.get('net_total')))
     data['tax_inclusive_amount'] = str(abs(sales_invoice.get('grand_total')))
     data['allowance_total_amount'] = str(abs(sales_invoice.get('discount_amount'))) or '0'
-    data['prepaid_amount'] = str(abs(sales_invoice.get('paid_amount')))
-    data['payable_amount'] = str(abs(sales_invoice.get('outstanding_amount')))
+    # PrepaidAmount (BT-113) is reserved by ZATCA for genuine advance-payment
+    # invoices (type code 386, referencing a separate prior prepayment
+    # document via KSA-26/28/29/30) - it is NOT "this invoice happened to be
+    # paid immediately". This app doesn't implement type-386 prepayment
+    # invoices, so PrepaidAmount must always be 0 here; using ERPNext's
+    # paid_amount instead triggered BR-KSA-73/BR-KSA-80 warnings from ZATCA
+    # and caused ZATCA's own clearance QR to encode PayableAmount (0 for a
+    # fully-paid sale) instead of the real invoice total.
+    data['prepaid_amount'] = '0'
+    data['payable_amount'] = str(abs(sales_invoice.get('grand_total')))
     
     
     # Customer Data
