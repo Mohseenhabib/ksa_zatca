@@ -80,6 +80,13 @@ def on_submit(doc, method=None):
             title=f"ZATCA auto-submit failed for {doc.name}",
             message=frappe.get_traceback(),
         )
+    finally:
+        # zatca_Call writes ksa_einv_qr/qr_code/custom_cleared etc. straight
+        # to the DB via separate doc instances, so this `doc` (whose state
+        # gets serialized back to the browser after submit) never sees them
+        # unless we reload it here - otherwise the UI looks stale until a
+        # full page refresh.
+        doc.reload()
 
 
 def generate_data_dict(doc_name):
@@ -355,6 +362,48 @@ def _store_xml_file(invoice_name,file_name, content=None):
 def _delete_xml_file(xml_name):
     subprocess.run(["rm", xml_name])
 
+def _decode_zatca_qr_tags(base64_qrcode):
+    """Decode a ZATCA TLV QR payload into a {tag: bytes} dict."""
+    raw = base64.b64decode(base64_qrcode)
+    tags = {}
+    i = 0
+    while i + 2 <= len(raw):
+        tag = raw[i]
+        length = raw[i + 1]
+        value = raw[i + 2:i + 2 + length]
+        if len(value) < length:
+            break
+        tags[tag] = value
+        i += 2 + length
+    return tags
+
+def _is_valid_cleared_qr(base64_qrcode, expected_total):
+    """Sanity-check the QR ZATCA hands back in its clearance response before
+    letting it replace our own known-correct pre-clearance QR. ZATCA's
+    response has been observed coming back with a total that doesn't match
+    what was submitted, and/or missing the trailing certificate-signature
+    tag - this catches both.
+    """
+    try:
+        tags = _decode_zatca_qr_tags(base64_qrcode)
+    except Exception:
+        return False
+
+    if len(tags) != 9:
+        return False
+
+    try:
+        returned_total = float(tags[4].decode('utf-8'))
+    except (KeyError, ValueError):
+        return False
+
+    try:
+        expected = float(expected_total)
+    except (TypeError, ValueError):
+        return True
+
+    return abs(returned_total - expected) < 0.01
+
 def zatca_request(data):
     auth = base64.b64encode(f"{data.get('token')}:{data.get('secret')}".encode()).decode()
     
@@ -412,10 +461,23 @@ def zatca_request(data):
                     root.getroottree().write(xml_name, encoding='utf-8')
                     _store_xml_file(data.get("invoice_name",""),xml_name,invoice)
                     _delete_xml_file(xml_name+'.xml')
-                    
-                    # Create Qrcode for Cleared Invoice
-                    attach_qr_code(base64_qrcode,data.get('invoice_name'),True)
-                    
+
+                    # Create Qrcode for Cleared Invoice, but only if it
+                    # actually looks like a genuine ZATCA-signed QR for this
+                    # invoice. Keep our own correct pre-clearance QR instead
+                    # of overwriting it with a bad one if it doesn't.
+                    if _is_valid_cleared_qr(base64_qrcode, data.get('tax_inclusive_amount')):
+                        attach_qr_code(base64_qrcode,data.get('invoice_name'),True)
+                    else:
+                        frappe.log_error(
+                            title=f"ZATCA cleared QR failed sanity check for {data.get('invoice_name')}",
+                            message=(
+                                f"Expected total: {data.get('tax_inclusive_amount')}\n"
+                                f"Cleared QR (base64): {base64_qrcode}\n"
+                                f"Full response: {response.text}"
+                            ),
+                        )
+
             elif data['request_type'] == 2:
                 frappe.msgprint(("Reporting Status: {0}").format(response.json().get('reportingStatus')))
                     
