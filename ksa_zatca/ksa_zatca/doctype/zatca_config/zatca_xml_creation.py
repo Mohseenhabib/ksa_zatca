@@ -699,11 +699,14 @@ def attach_qr_code(qrcode_base64,invoice_name,cleared=False):
     url.png(qr_image, scale=2, quiet_zone=1)
     qr_image_bytes = qr_image.getvalue()
 
-    # Saving QR Code image as a file
+    # Saving QR Code image as a file. "ZATCA" keeps this filename from
+    # colliding with ksa_vat's own "QR-CODE-{invoice_name}.png", and
+    # "CLEARED" makes it unambiguous at a glance whether this QR was
+    # actually accepted/echoed back by ZATCA or is just our own pre-clearance one.
     if cleared:
-        filename = f"CLEARED-QR-CODE-{invoice_name}.png".replace(os.path.sep, "__")
+        filename = f"CLEARED-QR-CODE-ZATCA-{invoice_name}.png".replace(os.path.sep, "__")
     else:
-        filename = f"QR-CODE-{invoice_name}.png".replace(os.path.sep, "__")
+        filename = f"QR-CODE-ZATCA-{invoice_name}.png".replace(os.path.sep, "__")
     _file = frappe.get_doc({
         "doctype": "File",
         "file_name": filename,
