@@ -19,7 +19,20 @@ import requests
 def zatca_Call(invoice_number='ACC-SINV-2024-00017'):
     if not frappe.db.exists("Sales Invoice", invoice_number):
         frappe.throw("Invoice Number is NOT Valid:  " + str(invoice_number))
-    
+
+    # Hard idempotency guard: never submit the same invoice to ZATCA's
+    # clearance/reporting endpoint twice, no matter what triggered this call
+    # (auto on_submit, a manual "Phase-2" click, a stale UI leading someone
+    # to click it again, etc.) - each call burns a fresh UUID and advances
+    # icv against the live/production ZATCA API.
+    if frappe.db.get_value("Sales Invoice", invoice_number, "custom_cleared"):
+        frappe.msgprint(
+            ("Invoice {0} has already been cleared with ZATCA - skipping re-submission.").format(invoice_number),
+            alert=True,
+            indicator="orange",
+        )
+        return
+
     dummy_data = generate_data_dict(invoice_number)
     # frappe.throw(str(dummy_data))
     if dummy_data['request_status'] == 3:
