@@ -693,52 +693,63 @@ def generate_qr_code(data):
     # Return the URL of the saved QR Code image file
     # return _file.file_url
 
+def _replace_attached_file(invoice_name, field, filename, content):
+    """Delete whatever file is currently attached to `field` on this invoice
+    (if any) and attach a new one, keeping exactly one file per field instead
+    of piling up one file per attach_qr_code() call (draft QR, pre-clearance
+    QR, cleared QR, ...).
+    """
+    for existing in frappe.get_all(
+        "File",
+        filters={
+            "attached_to_doctype": "Sales Invoice",
+            "attached_to_name": invoice_name,
+            "attached_to_field": field,
+        },
+        pluck="name",
+    ):
+        frappe.delete_doc("File", existing, ignore_permissions=True, delete_permanently=True)
+
+    _file = frappe.get_doc({
+        "doctype": "File",
+        "file_name": filename,
+        "content": content,
+        "is_private": 0,
+        "attached_to_doctype": "Sales Invoice",
+        "attached_to_name": invoice_name,
+        "attached_to_field": field,
+    })
+    _file.save()
+
+    # attached_to_field only records the association for File cleanup/listing;
+    # it does not populate the doc's own field. Set it explicitly so print
+    # formats reading this field actually see the new QR.
+    frappe.db.set_value("Sales Invoice", invoice_name, field, _file.file_url)
+    return _file.file_url
+
 def attach_qr_code(qrcode_base64,invoice_name,cleared=False):
     qr_image = io.BytesIO()
     url = qr_create(qrcode_base64, error='L')
     url.png(qr_image, scale=2, quiet_zone=1)
     qr_image_bytes = qr_image.getvalue()
 
-    # Saving QR Code image as a file. "ZATCA" keeps this filename from
-    # colliding with ksa_vat's own "QR-CODE-{invoice_name}.png", and
-    # "CLEARED" makes it unambiguous at a glance whether this QR was
-    # actually accepted/echoed back by ZATCA or is just our own pre-clearance one.
+    # "ZATCA" keeps this filename from colliding with ksa_vat's own
+    # "QR-CODE-{invoice_name}.png", and "CLEARED" makes it unambiguous at a
+    # glance whether this QR was actually accepted/echoed back by ZATCA or
+    # is just our own pre-clearance one.
     if cleared:
         filename = f"CLEARED-QR-CODE-ZATCA-{invoice_name}.png".replace(os.path.sep, "__")
     else:
         filename = f"QR-CODE-ZATCA-{invoice_name}.png".replace(os.path.sep, "__")
-    _file = frappe.get_doc({
-        "doctype": "File",
-        "file_name": filename,
-        "content": qr_image_bytes,
-        "is_private": 0,
-        "attached_to_doctype": "Sales Invoice",
-		"attached_to_name": invoice_name,
-		"attached_to_field": "ksa_einv_qr"
-    })
-    _file.save()
 
-    # attached_to_field only records the association for File cleanup/listing;
-    # it does not populate the doc's own field. Set it explicitly so print
-    # formats reading `ksa_einv_qr` actually see the signed/cleared QR.
-    frappe.db.set_value("Sales Invoice", invoice_name, "ksa_einv_qr", _file.file_url)
+    _replace_attached_file(invoice_name, "ksa_einv_qr", filename, qr_image_bytes)
 
     # Mirror into the legacy `qr_code` field (added by the ksa_vat app), when
     # present, so any print format still reading that field shows this same
     # signed/cleared ZATCA QR instead of ksa_vat's own draft-time QR.
     if frappe.get_meta("Sales Invoice").has_field("qr_code"):
         mirror_filename = f"{'CLEARED-' if cleared else ''}QR-CODE-KSAVAT-{invoice_name}.png".replace(os.path.sep, "__")
-        mirror_file = frappe.get_doc({
-            "doctype": "File",
-            "file_name": mirror_filename,
-            "content": qr_image_bytes,
-            "is_private": 0,
-            "attached_to_doctype": "Sales Invoice",
-            "attached_to_name": invoice_name,
-            "attached_to_field": "qr_code"
-        })
-        mirror_file.save()
-        frappe.db.set_value("Sales Invoice", invoice_name, "qr_code", mirror_file.file_url)
+        _replace_attached_file(invoice_name, "qr_code", mirror_filename, qr_image_bytes)
 
 def final_invoice(root,data):
     invoice_hash = root.find("./ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sig:UBLDocumentSignatures/sac:SignatureInformation/ds:Signature/ds:SignedInfo/ds:Reference[@Id='invoiceSignedData']/ds:DigestValue",ns_map)
