@@ -58,7 +58,29 @@ def zatca_Call(invoice_number='ACC-SINV-2024-00017'):
     root.getroottree().write(xml_name, encoding='utf-8')
     _store_xml_file(dummy_data.get("invoice_name",""),xml_name)
     _delete_xml_file(xml_name)
-    
+
+
+def on_submit(doc, method=None):
+    """Auto-run the ZATCA clearance/reporting call when a Sales Invoice is
+    submitted, so the correctly signed QR is attached without waiting for
+    the manual "Phase-2" button.
+
+    Never blocks submission: if the company isn't onboarded with ZATCA yet,
+    or the ZATCA call fails for any reason (e.g. network issue), the invoice
+    still submits normally and the "Phase-2" button remains available to
+    retry manually.
+    """
+    if not frappe.db.exists("Zatca Config", doc.company):
+        return
+
+    try:
+        zatca_Call(doc.name)
+    except Exception:
+        frappe.log_error(
+            title=f"ZATCA auto-submit failed for {doc.name}",
+            message=frappe.get_traceback(),
+        )
+
 
 def generate_data_dict(doc_name):
     # Get Required Docs

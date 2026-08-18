@@ -697,6 +697,7 @@ def attach_qr_code(qrcode_base64,invoice_name,cleared=False):
     qr_image = io.BytesIO()
     url = qr_create(qrcode_base64, error='L')
     url.png(qr_image, scale=2, quiet_zone=1)
+    qr_image_bytes = qr_image.getvalue()
 
     # Saving QR Code image as a file
     if cleared:
@@ -706,13 +707,35 @@ def attach_qr_code(qrcode_base64,invoice_name,cleared=False):
     _file = frappe.get_doc({
         "doctype": "File",
         "file_name": filename,
-        "content": qr_image.getvalue(),
+        "content": qr_image_bytes,
         "is_private": 0,
         "attached_to_doctype": "Sales Invoice",
 		"attached_to_name": invoice_name,
 		"attached_to_field": "ksa_einv_qr"
     })
     _file.save()
+
+    # attached_to_field only records the association for File cleanup/listing;
+    # it does not populate the doc's own field. Set it explicitly so print
+    # formats reading `ksa_einv_qr` actually see the signed/cleared QR.
+    frappe.db.set_value("Sales Invoice", invoice_name, "ksa_einv_qr", _file.file_url)
+
+    # Mirror into the legacy `qr_code` field (added by the ksa_vat app), when
+    # present, so any print format still reading that field shows this same
+    # signed/cleared ZATCA QR instead of ksa_vat's own draft-time QR.
+    if frappe.get_meta("Sales Invoice").has_field("qr_code"):
+        mirror_filename = f"{'CLEARED-' if cleared else ''}QR-CODE-KSAVAT-{invoice_name}.png".replace(os.path.sep, "__")
+        mirror_file = frappe.get_doc({
+            "doctype": "File",
+            "file_name": mirror_filename,
+            "content": qr_image_bytes,
+            "is_private": 0,
+            "attached_to_doctype": "Sales Invoice",
+            "attached_to_name": invoice_name,
+            "attached_to_field": "qr_code"
+        })
+        mirror_file.save()
+        frappe.db.set_value("Sales Invoice", invoice_name, "qr_code", mirror_file.file_url)
 
 def final_invoice(root,data):
     invoice_hash = root.find("./ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sig:UBLDocumentSignatures/sac:SignatureInformation/ds:Signature/ds:SignedInfo/ds:Reference[@Id='invoiceSignedData']/ds:DigestValue",ns_map)
