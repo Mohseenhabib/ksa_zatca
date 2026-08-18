@@ -400,17 +400,19 @@ def _decode_zatca_qr_tags(base64_qrcode):
 
 def _is_valid_cleared_qr(base64_qrcode, expected_total):
     """Sanity-check the QR ZATCA hands back in its clearance response before
-    letting it replace our own known-correct pre-clearance QR. ZATCA's
-    response has been observed coming back with a total that doesn't match
-    what was submitted, and/or missing the trailing certificate-signature
-    tag - this catches both.
+    letting it replace our own known-correct pre-clearance QR. This account's
+    clearance responses consistently come back with only 8 tags (no trailing
+    certificate-signature tag) - that's this account's normal, ZATCA-accepted
+    format, not corruption, so tag count isn't checked. What actually matters
+    is that the mandatory tags are present and the total matches what we
+    submitted.
     """
     try:
         tags = _decode_zatca_qr_tags(base64_qrcode)
     except Exception:
         return False
 
-    if len(tags) != 9:
+    if not {1, 2, 3, 4, 5}.issubset(tags):
         return False
 
     try:
