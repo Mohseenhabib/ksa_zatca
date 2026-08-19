@@ -278,10 +278,15 @@ def generate_data_dict(doc_name):
             data['customer_pz'] = customer_address.get('pincode')
     
     # Company Data
-    data['seller_name'] = company.get('name')
+    # ZATCA cross-validates that the QR's seller name (TLV tag 1) matches the
+    # XML's RegistrationName exactly - sellerName_QRCODE_INVALID otherwise -
+    # so both must use the same value. `company_id` is kept separately as the
+    # lookup key into Zatca Config, which is still named by the company's
+    # English name.
+    data['company_id'] = company.get('name')
     if company.get('company_name_in_arabic') in [None,'']:
         frappe.throw("Please Enter Company Name In Arabic in the Company document")
-    data['seller_name_ar'] = company.get('company_name_in_arabic')
+    data['seller_name'] = company.get('company_name_in_arabic')
     if company.get('tax_id') in [None,''] and data['invoice_type'] == '0100000':
         frappe.throw("Please Enter Company Tax ID")
     else:
@@ -500,7 +505,7 @@ def zatca_request(data):
             json=body
         )
         if response.status_code in [200,202,400]:
-            zatca_config = frappe.get_doc('Zatca Config', data.get('seller_name'))
+            zatca_config = frappe.get_doc('Zatca Config', data.get('company_id'))
             zatca_config.icv += 1
             zatca_config.pih = data.get('invoice_hash_encoded')
             zatca_config.save()

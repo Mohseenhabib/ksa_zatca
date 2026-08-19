@@ -609,7 +609,7 @@ def generate_qr_code(data):
     tlv_array = []
 
     # Seller's Name
-    seller_name = data.get('seller_name_ar') or data.get('seller_name', '')
+    seller_name = data.get('seller_name', '')
     tag = bytes([1]).hex()
     length = bytes([len(seller_name.encode('utf-8'))]).hex()
     value = seller_name.encode('utf-8').hex()
