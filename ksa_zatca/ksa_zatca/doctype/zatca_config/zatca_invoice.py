@@ -1,10 +1,12 @@
 import frappe
 import os
+import hashlib
 from xml.etree import ElementTree as ET
 # import all the functions from the zatca_xml.py file
 from ksa_zatca.ksa_zatca.doctype.zatca_config.zatca_xml import create_xml,salesinvoice_data,invoice_Typecode_Compliance,invoice_Typecode_Simplified,invoice_Typecode_Standard,doc_Reference,additional_Reference,company_Data,customer_Data,delivery_And_PaymentMeans,tax_Data,item_data,xml_structuring
 from ksa_zatca.ksa_zatca.doctype.zatca_config.zatca_xml_creation import read_xml_file,fill_basic_data,fill_taxes_data,fill_supplier_customer_data,fill_totals_data,fill_items_data,fill_signed_properties_tag,hash_invoice,sign_invoice_hash,generate_certificate_hash,hash_signed_properties_tag,generate_qr_code,final_invoice,fill_allowance_charge,attach_qr_code
 from ksa_zatca.ksa_zatca.doctype.zatca_config.zatca_config import get_base_url
+from frappe.utils.synchronization import filelock
 import re
 from datetime import datetime
 from lxml import etree
@@ -14,7 +16,7 @@ import base64
 import uuid
 import requests
 
-    
+
 @frappe.whitelist()
 def zatca_Call(invoice_number='ACC-SINV-2024-00017'):
     if not frappe.db.exists("Sales Invoice", invoice_number):
@@ -33,6 +35,20 @@ def zatca_Call(invoice_number='ACC-SINV-2024-00017'):
         )
         return
 
+    company = frappe.db.get_value("Sales Invoice", invoice_number, "company")
+    # The icv/pih chain in Zatca Config is a per-company running counter that
+    # every invoice must read, use, and advance strictly one-at-a-time - two
+    # invoices for the same company processed concurrently (e.g. two
+    # background workers picking up different invoices at once) would either
+    # both read the same icv (duplicate icv sent to ZATCA) or race on the
+    # final increment/save (TimestampMismatchError). A site-wide filelock
+    # keyed on the company serializes the whole read-send-advance sequence.
+    lock_name = "zatca_icv_" + hashlib.md5(company.encode("utf-8")).hexdigest()
+    with filelock(lock_name, timeout=120):
+        _zatca_call_locked(invoice_number)
+
+
+def _zatca_call_locked(invoice_number):
     dummy_data = generate_data_dict(invoice_number)
     # frappe.throw(str(dummy_data))
     if dummy_data['request_status'] == 3:
