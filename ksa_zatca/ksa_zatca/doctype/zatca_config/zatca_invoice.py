@@ -262,7 +262,9 @@ def generate_data_dict(doc_name):
             data['customer_pz'] = customer_address.get('pincode')
     
     # Company Data
-    data['seller_name'] = company.get('name')
+    if company.get('company_name_in_arabic') in [None,'']:
+        frappe.throw("Please Enter Company Name In Arabic in the Company document")
+    data['seller_name'] = company.get('company_name_in_arabic')
     if company.get('tax_id') in [None,''] and data['invoice_type'] == '0100000':
         frappe.throw("Please Enter Company Tax ID")
     else:
